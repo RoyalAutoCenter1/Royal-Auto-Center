@@ -1,0 +1,50 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # IMPORTANTE: usamos jwk-set-uri en vez de issuer-uri.
+          # Dentro de Docker, "localhost:9000" no resuelve al contenedor del
+          # authorization-server, hay que usar el nombre del servicio.
+          # Si usaramos issuer-uri con ese mismo nombre, Spring Security
+          # exigiria que el claim "iss" del token fuera igual a esa URL,
+          # pero el token se emite con "iss": "http://localhost:9000"
+          # (porque el navegador/cliente OAuth2 habla con el auth-server
+          # a traves del puerto publicado en el host). jwk-set-uri evita
+          # ese conflicto: solo se usa para ir a buscar las llaves publicas.
+          jwk-set-uri: ${OAUTH2_JWK_SET_URI:http://authorization-server:9000/oauth2/jwks}
+
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: ms-Edward
+              # En Docker Compose usa el nombre del servicio; en Railway,
+              # apunta a MS_A_URL (ideal: http://ms-a.railway.internal:8081).
+              uri: ${MS_A_URL:http://microservicio-a:8081}
+              predicates:
+                - Path=/api/entity-a/**
+              filters:
+                - StripPrefix=0
+
+            - id: microservicio_b
+              uri: ${MS_B_URL:http://microservicio-b:8082}
+              predicates:
+                - Path=/api/entity-b/**
+              filters:
+                - StripPrefix=0
+
+eureka:
+  client:
+    service-url:
+      # Tambien sobreescrito por la variable de entorno
+      # EUREKA_CLIENT_SERVICEURL_DEFAULTZONE en docker-compose.yml,
+      # se deja aqui como valor por defecto/documentacion.
+      defaultZone: http://eureka-server:8761/eureka/

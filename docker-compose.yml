@@ -1,0 +1,135 @@
+version: "3.9"
+# ============================================================
+# Orquestación completa: BD -> Eureka -> Auth -> Microservicios -> Gateway -> Frontend
+# Ajusta nombres de variables de entorno a los que realmente lean
+# tus application.yml/properties en cada proyecto.
+# ============================================================
+networks:
+  app-network:
+    driver: bridge
+volumes:
+  h2-auth-data:
+  h2-a-data:
+  h2-b-data:
+services:
+  # ---------- SERVIDOR DE REGISTRO (EUREKA) ----------
+  eureka-server:
+    build: ./servidor-eureka
+    container_name: servidor-eureka
+    restart: unless-stopped
+    ports:
+      - "8761:8761"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8761/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------- SERVIDOR DE AUTENTICACIÓN (OAuth2) ----------
+  authorization-server:
+    build: ./authorization-server
+    container_name: authorization-server
+    restart: unless-stopped
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+      SPRING_DATASOURCE_URL: jdbc:h2:file:/data/authdb;AUTO_SERVER=TRUE
+      SPRING_DATASOURCE_USERNAME: sa
+      SPRING_DATASOURCE_PASSWORD: ""
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.h2.Driver
+      SPRING_H2_CONSOLE_ENABLED: "true"
+      SPRING_H2_CONSOLE_SETTINGS_WEB_ALLOW_OTHERS: "true"
+    volumes:
+      - h2-auth-data:/data
+    ports:
+      - "9000:9000"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # ---------- MICROSERVICIO A ----------
+  microservicio-a:
+    build: ./ms-a
+    container_name: ms-a
+    restart: unless-stopped
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+      SPRING_DATASOURCE_URL: jdbc:h2:file:/data/adb;AUTO_SERVER=TRUE
+      SPRING_DATASOURCE_USERNAME: sa
+      SPRING_DATASOURCE_PASSWORD: ""
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.h2.Driver
+      SPRING_H2_CONSOLE_ENABLED: "true"
+      SPRING_H2_CONSOLE_SETTINGS_WEB_ALLOW_OTHERS: "true"
+    volumes:
+      - h2-a-data:/data
+    ports:
+      - "8081:8081"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # ---------- MICROSERVICIO B ----------
+  microservicio-b:
+    build: ./ms-b
+    container_name: ms-b
+    restart: unless-stopped
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+      SPRING_DATASOURCE_URL: jdbc:h2:file:/data/bdb;AUTO_SERVER=TRUE
+      SPRING_DATASOURCE_USERNAME: sa
+      SPRING_DATASOURCE_PASSWORD: ""
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.h2.Driver
+      SPRING_H2_CONSOLE_ENABLED: "true"
+      SPRING_H2_CONSOLE_SETTINGS_WEB_ALLOW_OTHERS: "true"
+    volumes:
+      - h2-b-data:/data
+    ports:
+      - "8082:8082"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # ---------- API GATEWAY (balanceo de carga + enrutamiento) ----------
+  gateway:
+    build: ./gateway
+    container_name: gateway
+    restart: unless-stopped
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka
+      # Usamos jwk-set-uri (no issuer-uri) para que el Gateway resuelva las
+      # llaves publicas via el nombre del servicio Docker, sin forzar que el
+      # claim "iss" del token (http://localhost:9000) coincida con esta URL.
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://authorization-server:9000/oauth2/jwks
+    ports:
+      - "8080:8080"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      microservicio-a:
+        condition: service_started
+      microservicio-b:
+        condition: service_started
+      authorization-server:
+        condition: service_started
+    networks:
+      - app-network
+
+  # ---------- FRONTEND (Angular + Nginx, cliente OAuth2) ----------
+  frontend-oauth:
+    build: ./gateway-client-react
+    container_name: gateway-client-react
+    restart: unless-stopped
+    ports:
+      - "8090:80"
+    depends_on:
+      - gateway
+      - authorization-server
+    networks:
+      - app-network
