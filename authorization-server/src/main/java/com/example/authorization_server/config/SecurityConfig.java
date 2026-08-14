@@ -121,7 +121,14 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();
 
-        source.registerCorsConfiguration("/**", configuration);
+        // Solo las rutas que el SPA llama de origen cruzado (fetch/XHR).
+        // /login es una pagina servida y enviada por formulario del mismo
+        // origen: los navegadores mandan header Origin incluso ahi, y si
+        // este filtro cubriera "/**" rechazaria ese POST con 403.
+        source.registerCorsConfiguration("/oauth2/**", configuration);
+        source.registerCorsConfiguration("/userinfo", configuration);
+        source.registerCorsConfiguration("/.well-known/**", configuration);
+        source.registerCorsConfiguration("/connect/**", configuration);
 
         return new CorsFilter(source);
     }
