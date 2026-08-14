@@ -5,6 +5,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -19,6 +20,9 @@ import java.util.UUID;
 
 @Configuration
 public class JwtConfig {
+
+    @Value("${OAUTH2_ISSUER_URI:http://localhost:9000}")
+    private String issuerUri;
 
     @Bean
     public JWKSource<SecurityContext> jwkSource() {
@@ -49,7 +53,7 @@ public class JwtConfig {
     public AuthorizationServerSettings authorizationServerSettings() {
 
         return AuthorizationServerSettings.builder()
-                .issuer("http://localhost:9000")
+                .issuer(issuerUri)
                 .build();
 
     }

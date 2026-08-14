@@ -6,13 +6,8 @@ spring:
   application:
     name: authorization-server
 
-  security:
-
-    oauth2:
-
-      authorizationserver:
-
-        issuer: ${OAUTH2_ISSUER_URI:http://localhost:9000}
+# El issuer real se fija en JwtConfig.java (bean AuthorizationServerSettings),
+# que tiene prioridad sobre esta ruta de propiedades.
 
 logging:
 
